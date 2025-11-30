@@ -8,7 +8,6 @@ use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Cake\ORM\TableRegistry;
-use App\Workflow\InvoiceEnforcementWorkflow;
 
 class SchedulerCommand extends Command
 {
@@ -153,11 +152,20 @@ class SchedulerCommand extends Command
 
     protected function getWorkflowClass(string $name): ?string
     {
-        // Simple mapping for now
-        $map = [
-            'InvoiceEnforcement' => InvoiceEnforcementWorkflow::class,
-        ];
+        // Auto-discover workflow classes from App\Workflow namespace
+        $className = 'App\\Workflow\\' . $name . 'Workflow';
 
-        return $map[$name] ?? null;
+        if (class_exists($className)) {
+            return $className;
+        }
+
+        // Fallback: Try without 'Workflow' suffix
+        $className = 'App\\Workflow\\' . $name;
+
+        if (class_exists($className)) {
+            return $className;
+        }
+
+        return null;
     }
 }

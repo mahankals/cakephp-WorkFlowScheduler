@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial release of WorkFlow Scheduler Plugin for CakePHP 5.x
+- **Auto-Discovery**: Workflows are automatically discovered from `App\Workflow` namespace - no manual registration needed!
 - Workflow management system with database-backed configuration
 - Execution tracking with status monitoring (pending, running, completed, failed)
 - Step-by-step execution logging with input/output data

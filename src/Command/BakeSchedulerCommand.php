@@ -7,7 +7,6 @@ use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
-use Cake\Filesystem\Folder;
 
 class BakeSchedulerCommand extends Command
 {
@@ -33,7 +32,7 @@ class BakeSchedulerCommand extends Command
             return static::CODE_ERROR;
         }
 
-        $workflowDir = ROOT . DS . 'plugins' . DS . 'WorkFlowScheduler' . DS . 'src' . DS . 'Workflow';
+        $workflowDir = ROOT . DS . 'src' . DS . 'Workflow';
         $filePath = $workflowDir . DS . $name . 'Workflow.php';
 
         if (file_exists($filePath)) {
@@ -43,8 +42,10 @@ class BakeSchedulerCommand extends Command
 
         $template = $this->getTemplate($name);
 
-        $folder = new Folder();
-        $folder->create($workflowDir, 0755);
+        // Create directory if it doesn't exist
+        if (!is_dir($workflowDir)) {
+            mkdir($workflowDir, 0755, true);
+        }
 
         if (file_put_contents($filePath, $template)) {
             $io->success("Created workflow: {$filePath}");
@@ -52,9 +53,11 @@ class BakeSchedulerCommand extends Command
             $io->out('Next steps:');
             $io->out('1. Edit the workflow file to add your custom logic.');
             $io->out('2. Add the workflow to the database:');
-            $io->out("   INSERT INTO workflows (name, description, schedule, status, created, modified)");
-            $io->out("   VALUES ('{$name}', 'Description', '* * * * *', 1, NOW(), NOW());");
-            $io->out('3. Register the workflow in SchedulerCommand::getWorkflowClass()');
+            $io->out("   INSERT INTO workflows (id, name, description, schedule, status, created, modified)");
+            $io->out("   VALUES (UUID(), '{$name}', 'Description', '* * * * *', 1, NOW(), NOW());");
+            $io->out('');
+            $io->out('Note: The workflow will be auto-discovered from App\\Workflow namespace.');
+            $io->out('No manual registration needed!');
             return static::CODE_SUCCESS;
         } else {
             $io->error('Failed to create workflow file.');
@@ -68,15 +71,16 @@ class BakeSchedulerCommand extends Command
 <?php
 declare(strict_types=1);
 
-namespace WorkFlowScheduler\\Workflow;
+namespace App\\Workflow;
 
 use Cake\\ORM\\TableRegistry;
+use WorkFlowScheduler\\Workflow\\WorkflowInterface;
 
 class {$name}Workflow implements WorkflowInterface
 {
     protected \$executionId;
 
-    public function execute(int \$executionId): void
+    public function execute(string \$executionId): void
     {
         \$this->executionId = \$executionId;
         \$startTime = microtime(true);

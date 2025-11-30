@@ -69,14 +69,16 @@ src/
 
 ## 🔧 How to Create New Workflows
 
-### Option 1: Using Bake Command
+### Option 1: Using Bake Command (Recommended)
 ```bash
 bin/cake work_flow_scheduler.bake_scheduler MyNewWorkflow
 ```
 
+This creates `src/Workflow/MyNewWorkflowWorkflow.php` with a complete template.
+
 ### Option 2: Manual Creation
 
-1. **Create workflow class** in `src/Workflow/MyNewWorkflow.php`:
+1. **Create workflow class** in `src/Workflow/MyNewWorkflowWorkflow.php`:
 ```php
 <?php
 namespace App\Workflow;
@@ -84,7 +86,7 @@ namespace App\Workflow;
 use WorkFlowScheduler\Workflow\WorkflowInterface;
 use Cake\ORM\TableRegistry;
 
-class MyNewWorkflow implements WorkflowInterface
+class MyNewWorkflowWorkflow implements WorkflowInterface
 {
     protected $executionId;
 
@@ -102,19 +104,19 @@ INSERT INTO workflows (id, name, description, schedule, status, created, modifie
 VALUES (UUID(), 'MyNewWorkflow', 'Description', '* * * * *', 1, NOW(), NOW());
 ```
 
-3. **Map in SchedulerCommand**:
-```php
-use App\Workflow\MyNewWorkflow;
+**That's it!** The workflow will be **auto-discovered** - no manual registration needed!
 
-protected function getWorkflowClass(string $name): ?string
-{
-    $map = [
-        'InvoiceEnforcement' => InvoiceEnforcementWorkflow::class,
-        'MyNewWorkflow' => MyNewWorkflow::class,
-    ];
-    return $map[$name] ?? null;
-}
-```
+### Auto-Discovery Pattern
+
+- Database name: `MyNewWorkflow`
+- Class name: `App\Workflow\MyNewWorkflowWorkflow`
+- File: `src/Workflow/MyNewWorkflowWorkflow.php`
+
+The scheduler automatically finds your workflow class by:
+1. Taking the workflow name from database (e.g., `InvoiceEnforcement`)
+2. Appending `Workflow` (e.g., `InvoiceEnforcementWorkflow`)
+3. Looking in `App\Workflow` namespace
+4. Fallback: tries without `Workflow` suffix if not found
 
 ## 📊 Database Schema
 
