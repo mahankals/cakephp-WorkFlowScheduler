@@ -117,4 +117,51 @@ abstract class BaseWorkflow implements WorkflowInterface
         }
         $executionsTable->save($execution);
     }
+
+    /**
+     * Get the workflow name (without 'Workflow' suffix)
+     * Override this method to provide a custom name
+     *
+     * @return string
+     */
+    public function getName(): string
+    {
+        $className = (new \ReflectionClass($this))->getShortName();
+        // Remove 'Workflow' suffix if present
+        return preg_replace('/Workflow$/', '', $className);
+    }
+
+    /**
+     * Get the workflow description
+     * Override this method to provide a custom description
+     *
+     * @return string
+     */
+    public function getDescription(): string
+    {
+        return 'Auto-discovered workflow';
+    }
+
+    /**
+     * Get the cron schedule expression
+     * Override this method to provide a custom schedule
+     * Default: Every hour at minute 0
+     *
+     * @return string Cron expression (e.g., '0 * * * *')
+     */
+    public function getSchedule(): string
+    {
+        return '0 * * * *'; // Every hour
+    }
+
+    /**
+     * Get the default status for the workflow
+     * Override this method to change default status
+     *
+     * @return int 0 = disabled, 1 = enabled
+     */
+    public function getDefaultStatus(): int
+    {
+        return 0; // Disabled by default
+    }
 }

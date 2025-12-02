@@ -4,7 +4,9 @@ A CakePHP plugin to manage and execute automated workflows, similar to make.com 
 
 ## Features
 - **Workflow Management**: Define workflows with specific schedules.
-- **Auto-Discovery**: Workflows are automatically discovered from `App\Workflow` namespace - no manual registration needed!
+- **Auto-Discovery**: Workflows are automatically discovered from `App\Workflow` namespace and registered via command.
+- **Cron Validation**: Built-in cron expression validator with human-readable descriptions (e.g., "Every 15 minutes").
+- **Live Schedule Editing**: Edit schedules directly in the UI with real-time validation and next execution preview.
 - **Parallel Execution**: Run multiple workflows simultaneously with configurable concurrency limits (default: 5 concurrent executions).
 - **Cross-Platform**: Works on both Windows (development) and Linux (production) with optimized process management.
 - **Execution Tracking**: Track every execution of a workflow, including status (pending, running, completed, failed).
@@ -53,23 +55,39 @@ bin/cake work_flow_scheduler.bake_scheduler MyNewWorkflow
 
 This creates `src/Workflow/MyNewWorkflowWorkflow.php` with a complete template.
 
-### 2. Register in Database
+### 2. Define Metadata
 
-Add your workflow to the database:
+Override the metadata methods in your workflow class to define its properties:
 
-```sql
-INSERT INTO workflows (id, name, description, schedule, status, created, modified)
-VALUES (UUID(), 'MyNewWorkflow', 'Description of my workflow', '* * * * *', 1, NOW(), NOW());
+```php
+    public function getName(): string
+    {
+        return 'MyNewWorkflow';
+    }
+
+    public function getDescription(): string
+    {
+        return 'Description of my workflow';
+    }
+
+    public function getSchedule(): string
+    {
+        return '*/15 * * * *'; // Run every 15 minutes
+    }
 ```
 
-**Note**: The workflow name in the database must match the class name (without the "Workflow" suffix).
-- Database name: `MyNewWorkflow`
-- Class name: `MyNewWorkflowWorkflow`
-- File: `src/Workflow/MyNewWorkflowWorkflow.php`
+### 3. Register Workflows
 
-### 3. That's It!
+Run the discovery command to register your workflow in the database:
 
-The workflow will be **automatically discovered** - no manual registration needed! Just execute it from the UI or let the scheduler run it.
+```bash
+bin/cake work_flow_scheduler.discover
+```
+
+This command scans your `src/Workflow` directory, extracts metadata, and updates the database automatically. It will:
+- Create new workflows
+- Update existing workflows (if metadata changed)
+- Preserve the status (Active/Inactive) of existing workflows
 
 ## Directory Structure
 
@@ -186,19 +204,30 @@ classDiagram
 
 ## Auto-Discovery
 
-Workflows are automatically discovered from the `App\Workflow` namespace using the following pattern:
+The plugin includes a discovery command that scans your `src/Workflow/` directory for workflow classes.
 
-- **Database name**: `MyNewWorkflow`
-- **Class name**: `App\Workflow\MyNewWorkflowWorkflow`
-- **File location**: `src/Workflow/MyNewWorkflowWorkflow.php`
+### How it works
 
-The scheduler automatically:
-1. Takes the workflow name from the database (e.g., `InvoiceEnforcement`)
-2. Appends `Workflow` to create the class name (e.g., `NotifyStuckedProcessWorkflow`)
-3. Looks for the class in `App\Workflow` namespace
-4. If not found, tries without the `Workflow` suffix as a fallback
+1.  **Scans Directory**: It looks for PHP files in `src/Workflow/` ending with `Workflow.php`.
+2.  **Instantiates Class**: It creates an instance of each workflow class.
+3.  **Extracts Metadata**: It calls `getName()`, `getDescription()`, `getSchedule()`, and `getDefaultStatus()`.
+4.  **Updates Database**:
+    *   If the workflow doesn't exist, it creates it.
+    *   If it exists, it updates the description and schedule (but preserves the current status).
 
-**No manual registration required!** Just create the class and add it to the database.
+### Running Discovery
+
+Run this command whenever you add a new workflow or change metadata:
+
+```bash
+bin/cake work_flow_scheduler.discover
+```
+
+You can also run it with `--verbose` to see details:
+
+```bash
+bin/cake work_flow_scheduler.discover --verbose
+```
 
 ## Workflow Step Structure
 

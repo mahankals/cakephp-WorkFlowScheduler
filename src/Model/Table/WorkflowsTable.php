@@ -53,7 +53,16 @@ class WorkflowsTable extends Table
         $validator
             ->scalar('schedule')
             ->maxLength('schedule', 255)
-            ->allowEmptyString('schedule');
+            ->allowEmptyString('schedule')
+            ->add('schedule', 'validCron', [
+                'rule' => function ($value, $context) {
+                    if (empty($value)) {
+                        return true; // Allow empty
+                    }
+                    return \WorkFlowScheduler\Utility\CronHelper::isValid($value);
+                },
+                'message' => 'Please enter a valid cron expression (e.g., "*/10 * * * *" for every 10 minutes)'
+            ]);
 
         $validator
             ->integer('status')

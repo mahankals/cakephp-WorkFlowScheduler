@@ -9,6 +9,7 @@ use Cake\Core\ContainerInterface;
 use Cake\Core\PluginApplicationInterface;
 use Cake\Http\MiddlewareQueue;
 use Cake\Routing\RouteBuilder;
+use WorkFlowScheduler\Command\DiscoverWorkflowsCommand;
 use WorkFlowScheduler\Command\ExecuteWorkflowCommand;
 
 /**
@@ -103,6 +104,7 @@ class WorkFlowSchedulerPlugin extends BasePlugin
 
         // Register commands
         $commands->add('work_flow_scheduler.execute_workflow', ExecuteWorkflowCommand::class);
+        $commands->add('work_flow_scheduler.discover', DiscoverWorkflowsCommand::class);
 
         return $commands;
     }

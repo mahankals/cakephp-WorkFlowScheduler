@@ -14,6 +14,7 @@ class WorkflowsController extends AppController
 {
     public function index()
     {
+        /** @var \WorkFlowScheduler\Model\Entity\Workflow[] $workflows */
         $workflows = $this->fetchTable('WorkFlowScheduler.Workflows')->find('all')->toArray();
 
         // Fetch last execution for each workflow
@@ -25,6 +26,8 @@ class WorkflowsController extends AppController
                 ->first();
 
             $workflow->last_execution = $lastExecution;
+            $workflow->next_execution = \WorkFlowScheduler\Utility\CronHelper::getNextRunDate($workflow->schedule);
+            $workflow->schedule_description = \WorkFlowScheduler\Utility\CronHelper::describe($workflow->schedule);
         }
 
         $this->set(compact('workflows'));
@@ -32,6 +35,7 @@ class WorkflowsController extends AppController
 
     public function view($id = null)
     {
+        /** @var \WorkFlowScheduler\Model\Entity\Workflow $workflow */
         $workflow = $this->fetchTable('WorkFlowScheduler.Workflows')->get($id);
 
         // Pagination and filtering for executions
@@ -65,6 +69,7 @@ class WorkflowsController extends AppController
         $this->request->allowMethod(['post']);
 
         $workflowsTable = $this->fetchTable('WorkFlowScheduler.Workflows');
+        /** @var \WorkFlowScheduler\Model\Entity\Workflow $workflow */
         $workflow = $workflowsTable->get($id);
 
         $executionsTable = $this->fetchTable('WorkFlowScheduler.WorkflowExecutions');
@@ -95,6 +100,7 @@ class WorkflowsController extends AppController
 
     public function edit($id = null)
     {
+        /** @var \WorkFlowScheduler\Model\Entity\Workflow $workflow */
         $workflow = $this->fetchTable('WorkFlowScheduler.Workflows')->get($id);
 
         if ($this->request->is(['patch', 'post', 'put'])) {
@@ -114,6 +120,7 @@ class WorkflowsController extends AppController
         $this->request->allowMethod(['post']);
         $this->viewBuilder()->setClassName('Json');
 
+        /** @var \WorkFlowScheduler\Model\Entity\Workflow $workflow */
         $workflow = $this->fetchTable('WorkFlowScheduler.Workflows')->get($id);
         $workflow->status = $workflow->status == 1 ? 0 : 1;
 
@@ -130,22 +137,7 @@ class WorkflowsController extends AppController
         $this->viewBuilder()->setOption('serialize', ['success', 'status', 'statusText']);
     }
 
-    public function updateSchedule($id = null)
-    {
-        $this->request->allowMethod(['post']);
-        $this->viewBuilder()->setClassName('Json');
 
-        $workflow = $this->fetchTable('WorkFlowScheduler.Workflows')->get($id);
-        $workflow->schedule = $this->request->getData('schedule');
-
-        if ($this->fetchTable('WorkFlowScheduler.Workflows')->save($workflow)) {
-            $this->set(['success' => true, 'schedule' => $workflow->schedule]);
-        } else {
-            $this->set(['success' => false]);
-        }
-
-        $this->viewBuilder()->setOption('serialize', ['success', 'schedule']);
-    }
 
     public function statusAll()
     {
@@ -154,6 +146,7 @@ class WorkflowsController extends AppController
         $workflows = $this->fetchTable('WorkFlowScheduler.Workflows')->find('all');
         $data = [];
 
+        /** @var \WorkFlowScheduler\Model\Entity\Workflow $workflow */
         foreach ($workflows as $workflow) {
             // Check for running executions
             $running = $this->fetchTable('WorkFlowScheduler.WorkflowExecutions')->exists([
@@ -211,5 +204,63 @@ class WorkflowsController extends AppController
 
         $this->set(compact('executions'));
         $this->viewBuilder()->setOption('serialize', 'executions');
+    }
+
+    /**
+     * Update workflow schedule via AJAX
+     */
+    public function updateSchedule($id = null)
+    {
+        $this->request->allowMethod(['post']);
+        $this->viewBuilder()->setClassName('Json');
+
+        /** @var \WorkFlowScheduler\Model\Entity\Workflow $workflow */
+        $workflow = $this->fetchTable('WorkFlowScheduler.Workflows')->get($id);
+        $data = $this->request->getData();
+
+        $workflow->schedule = $data['schedule'];
+
+        if ($this->fetchTable('WorkFlowScheduler.Workflows')->save($workflow)) {
+            $this->set([
+                'success' => true,
+                'schedule' => $workflow->schedule,
+                '_serialize' => ['success', 'schedule']
+            ]);
+        } else {
+            $this->set([
+                'success' => false,
+                '_serialize' => ['success']
+            ]);
+        }
+    }
+
+    /**
+     * Validate cron expression via AJAX
+     */
+    public function validateCron()
+    {
+        $this->request->allowMethod(['post']);
+        $this->viewBuilder()->setClassName('Json');
+
+        $data = $this->request->getData();
+        $schedule = $data['schedule'] ?? '';
+
+        $valid = \WorkFlowScheduler\Utility\CronHelper::isValid($schedule);
+        $description = $valid ? \WorkFlowScheduler\Utility\CronHelper::describe($schedule) : '';
+        $nextExecution = null;
+
+        if ($valid) {
+            $next = \WorkFlowScheduler\Utility\CronHelper::getNextRunDate($schedule);
+            if ($next) {
+                $nextExecution = $next->format('M d, Y g:i A');
+            }
+        }
+
+        $this->set([
+            'valid' => $valid,
+            'description' => $description,
+            'next_execution' => $nextExecution,
+            '_serialize' => ['valid', 'description', 'next_execution']
+        ]);
     }
 }

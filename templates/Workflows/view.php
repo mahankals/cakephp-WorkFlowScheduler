@@ -1,112 +1,103 @@
-<?php
-/**
- * @var \App\View\AppView $this
- * @var \Cake\Datasource\EntityInterface $workflow
- * @var \Cake\Paginator\PaginatedResultSet $executions
- */
-?>
-<style>
-    .accordion {
-        background-color: #eee;
-        color: #444;
-        cursor: pointer;
-        padding: 10px;
-        width: 100%;
-        border: none;
-        text-align: left;
-        outline: none;
-        font-size: 15px;
-        transition: 0.4s;
-        margin-top: 5px;
-    }
+background-color: #eee;
+color: #444;
+cursor: pointer;
+padding: 10px;
+width: 100%;
+border: none;
+text-align: left;
+outline: none;
+font-size: 15px;
+transition: 0.4s;
+margin-top: 5px;
+}
 
-    .active,
-    .accordion:hover {
-        background-color: #ccc;
-    }
+.active,
+.accordion:hover {
+background-color: #ccc;
+}
 
-    .panel {
-        padding: 0 18px;
-        background-color: white;
-        max-height: 0;
-        overflow: hidden;
-        transition: max-height 0.2s ease-out;
-    }
+.panel {
+padding: 0 18px;
+background-color: white;
+max-height: 0;
+overflow: hidden;
+transition: max-height 0.2s ease-out;
+}
 
-    .filter-columns {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-        padding: 15px 0;
-    }
+.filter-columns {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+gap: 15px;
+padding: 15px 0;
+}
 
-    .status-toggle {
-        cursor: pointer;
-        padding: 5px 10px;
-        border-radius: 4px;
-        display: inline-block;
-        font-weight: bold;
-    }
+.status-toggle {
+cursor: pointer;
+padding: 5px 10px;
+border-radius: 4px;
+display: inline-block;
+font-weight: bold;
+}
 
-    .status-active {
-        background-color: #4CAF50;
-        color: white;
-    }
+.status-active {
+background-color: #4CAF50;
+color: white;
+}
 
-    .status-inactive {
-        background-color: #f44336;
-        color: white;
-    }
+.status-inactive {
+background-color: #f44336;
+color: white;
+}
 
-    .schedule-edit {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-    }
+.schedule-edit {
+display: inline-flex;
+align-items: center;
+gap: 5px;
+}
 
-    .schedule-value {
-        cursor: pointer;
-    }
+.schedule-value {
+cursor: pointer;
+}
 
-    .schedule-input {
-        display: none;
-    }
+.schedule-input {
+display: none;
+}
 
-    .edit-icon {
-        cursor: pointer;
-        margin-left: 5px;
-        color: #666;
-    }
+.edit-icon {
+cursor: pointer;
+margin-left: 5px;
+color: #666;
+}
 
-    .clickable-row {
-        cursor: pointer;
-    }
+.clickable-row {
+cursor: pointer;
+}
 
-    .clickable-row:hover {
-        background-color: #f5f5f5;
-    }
+.clickable-row:hover {
+background-color: #f5f5f5;
+}
 
-    .loader {
-        border: 2px solid #f3f3f3;
-        border-top: 2px solid #3498db;
-        border-radius: 50%;
-        width: 12px;
-        height: 12px;
-        animation: spin 1s linear infinite;
-        display: inline-block;
-        vertical-align: middle;
-        margin-right: 5px;
-    }
+.loader {
+border: 2px solid #f3f3f3;
+border-top: 2px solid #3498db;
+border-radius: 50%;
+width: 12px;
+height: 12px;
+animation: spin 1s linear infinite;
+display: inline-block;
+vertical-align: middle;
+margin-right: 5px;
+}
 
-    @keyframes spin {
-        0% {
-            transform: rotate(0deg);
-        }
+@keyframes spin {
+0% {
+transform: rotate(0deg);
+}
 
-        100% {
-            transform: rotate(360deg);
-        }
-    }
+100% {
+transform: rotate(360deg);
+}
+}
 </style>
 
 <div class="workflows view content">
@@ -121,12 +112,24 @@
         <tr>
             <th><?= __('Schedule') ?></th>
             <td class="schedule-edit">
-                <span class="schedule-value" id="schedule-display"><?= h($workflow->schedule) ?></span>
-                <input type="text" class="schedule-input" id="schedule-input" value="<?= h($workflow->schedule) ?>"
-                    style="display:none;">
-                <span class="edit-icon" id="schedule-edit-btn" onclick="editSchedule()">✏️</span>
-                <button id="schedule-save-btn" onclick="saveSchedule()" style="display:none;">Save</button>
-                <button id="schedule-cancel-btn" onclick="cancelSchedule()" style="display:none;">Cancel</button>
+                <div>
+                    <code class="schedule-value" id="schedule-display"><?= h($workflow->schedule) ?></code>
+                    <input type="text" class="schedule-input" id="schedule-input" value="<?= h($workflow->schedule) ?>"
+                        style="display:none;" placeholder="*/10 * * * *">
+                    <span class="edit-icon" id="schedule-edit-btn" onclick="editSchedule()">✏️</span>
+                    <button id="schedule-save-btn" onclick="saveSchedule()" style="display:none;">Save</button>
+                    <button id="schedule-cancel-btn" onclick="cancelSchedule()" style="display:none;">Cancel</button>
+                </div>
+                <div style="margin-top: 5px;">
+                    <small style="color: #666;" id="schedule-description">
+                        <?php
+                        $desc = \WorkFlowScheduler\Utility\CronHelper::describe($workflow->schedule);
+                        echo h($desc);
+                        ?>
+                    </small>
+                </div>
+                <div id="schedule-validation" style="display:none; margin-top: 5px; padding: 8px; border-radius: 4px;">
+                </div>
             </td>
         </tr>
         <tr>
@@ -329,6 +332,10 @@
         document.getElementById('schedule-edit-btn').style.display = 'none';
         document.getElementById('schedule-save-btn').style.display = 'inline';
         document.getElementById('schedule-cancel-btn').style.display = 'inline';
+        document.getElementById('schedule-validation').style.display = 'block';
+
+        // Trigger validation immediately
+        validateSchedule();
     }
 
     function cancelSchedule() {
@@ -337,6 +344,72 @@
         document.getElementById('schedule-edit-btn').style.display = 'inline';
         document.getElementById('schedule-save-btn').style.display = 'none';
         document.getElementById('schedule-cancel-btn').style.display = 'none';
+        document.getElementById('schedule-validation').style.display = 'none';
+
+        // Reset input to original value
+        document.getElementById('schedule-input').value = document.getElementById('schedule-display').textContent;
+    }
+
+    // Live validation
+    document.getElementById('schedule-input').addEventListener('input', debounce(validateSchedule, 500));
+
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    function validateSchedule() {
+        const input = document.getElementById('schedule-input');
+        const validationDiv = document.getElementById('schedule-validation');
+        const saveBtn = document.getElementById('schedule-save-btn');
+        const value = input.value.trim();
+
+        if (!value) {
+            validationDiv.style.display = 'none';
+            return;
+        }
+
+        validationDiv.innerHTML = '<div class="loader" style="width:10px;height:10px;border-width:2px;"></div> Checking...';
+        validationDiv.style.backgroundColor = '#f0f8ff';
+        validationDiv.style.color = '#333';
+
+        fetch('<?= $this->Url->build(['action' => 'validateCron']) ?>', {
+            method: 'POST',
+            headers: {
+                'X-CSRF-Token': '<?= $this->request->getAttribute('csrfToken') ?>',
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ schedule: value })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.valid) {
+                    validationDiv.style.backgroundColor = '#e8f5e9';
+                    validationDiv.style.color = '#2e7d32';
+                    validationDiv.innerHTML = '<strong>✓ Valid</strong><br>' + data.description;
+                    if (data.next_execution) {
+                        validationDiv.innerHTML += '<br><small>Next: ' + data.next_execution + '</small>';
+                    }
+                    saveBtn.disabled = false;
+                } else {
+                    validationDiv.style.backgroundColor = '#ffebee';
+                    validationDiv.style.color = '#c62828';
+                    validationDiv.innerHTML = '<strong>✗ Invalid Cron Expression</strong><br>Example: */10 * * * *';
+                    saveBtn.disabled = true;
+                }
+            })
+            .catch(error => {
+                console.error('Error validating:', error);
+                validationDiv.innerHTML = 'Error validating schedule';
+            });
     }
 
     function saveSchedule() {
@@ -358,6 +431,23 @@
             .then(data => {
                 if (data.success) {
                     document.getElementById('schedule-display').textContent = data.schedule;
+
+                    // Update description if available
+                    fetch('<?= $this->Url->build(['action' => 'validateCron']) ?>', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-Token': '<?= $this->request->getAttribute('csrfToken') ?>',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ schedule: data.schedule })
+                    })
+                        .then(r => r.json())
+                        .then(d => {
+                            if (d.description) {
+                                document.getElementById('schedule-description').textContent = d.description;
+                            }
+                        });
+
                     cancelSchedule();
                 } else {
                     alert('Failed to update schedule');

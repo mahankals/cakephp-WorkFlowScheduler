@@ -1,92 +1,83 @@
-<?php
-/**
- * @var \App\View\AppView $this
- * @var iterable<\Cake\Datasource\EntityInterface> $workflows
- */
-?>
-<style>
-    .clickable-row {
-        cursor: pointer;
-    }
+}
 
-    .clickable-row:hover {
-        background-color: #f5f5f5;
-    }
+.clickable-row:hover {
+background-color: #f5f5f5;
+}
 
-    .status-toggle {
-        cursor: pointer;
-        padding: 5px 10px;
-        border-radius: 4px;
-        display: inline-block;
-        font-weight: bold;
-    }
+.status-toggle {
+cursor: pointer;
+padding: 5px 10px;
+border-radius: 4px;
+display: inline-block;
+font-weight: bold;
+}
 
-    .status-active {
-        background-color: #4CAF50;
-        color: white;
-    }
+.status-active {
+background-color: #4CAF50;
+color: white;
+}
 
-    .status-inactive {
-        background-color: #f44336;
-        color: white;
-    }
+.status-inactive {
+background-color: #f44336;
+color: white;
+}
 
-    .loader {
-        border: 2px solid #f3f3f3;
-        border-top: 2px solid #3498db;
-        border-radius: 50%;
-        width: 12px;
-        height: 12px;
-        animation: spin 1s linear infinite;
-        display: inline-block;
-        vertical-align: middle;
-        margin-right: 5px;
-    }
+.loader {
+border: 2px solid #f3f3f3;
+border-top: 2px solid #3498db;
+border-radius: 50%;
+width: 12px;
+height: 12px;
+animation: spin 1s linear infinite;
+display: inline-block;
+vertical-align: middle;
+margin-right: 5px;
+}
 
-    @keyframes spin {
-        0% {
-            transform: rotate(0deg);
-        }
+@keyframes spin {
+0% {
+transform: rotate(0deg);
+}
 
-        100% {
-            transform: rotate(360deg);
-        }
-    }
+100% {
+transform: rotate(360deg);
+}
+}
 
-    .running-indicator {
-        display: inline-block;
-        margin-left: 5px;
-    }
+.running-indicator {
+display: inline-block;
+margin-left: 5px;
+}
 
-    .execution-status {
-        display: inline-block;
-        padding: 2px 6px;
-        border-radius: 3px;
-        font-size: 11px;
-        font-weight: bold;
-        margin-right: 5px;
-    }
+.execution-status {
+display: inline-block;
+padding: 2px 6px;
+border-radius: 3px;
+font-size: 11px;
+font-weight: bold;
+margin-right: 5px;
+}
 
-    .execution-status.completed {
-        background-color: #4CAF50;
-        color: white;
-    }
+.execution-status.completed {
+background-color: #4CAF50;
+color: white;
+}
 
-    .execution-status.failed {
-        background-color: #f44336;
-        color: white;
-    }
+.execution-status.failed {
+background-color: #f44336;
+color: white;
+}
 
-    .execution-status.running,
-    .execution-status.pending {
-        background-color: #2196F3;
-        color: white;
-    }
+.execution-status.running,
+.execution-status.pending {
+background-color: #2196F3;
+color: white;
+}
 
-    .execution-date {
-        color: #666;
-        font-size: 13px;
-    }
+.execution-date {
+color: #666;
+font-size: 13px;
+}
 </style>
 
 <div class="workflows index content">
@@ -111,7 +102,11 @@
                                 <div class="loader"></div>
                             </span>
                         </td>
-                        <td><?= h($workflow->schedule) ?></td>
+                        <td>
+                            <code><?= h($workflow->schedule) ?></code>
+                            <br>
+                            <small style="color: #666;"><?= h($workflow->schedule_description ?? '') ?></small>
+                        </td>
                         <td>
                             <span class="status-toggle status-<?= $workflow->status == 1 ? 'active' : 'inactive' ?>"
                                 data-id="<?= $workflow->id ?>"
