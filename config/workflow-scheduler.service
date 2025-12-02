@@ -1,0 +1,26 @@
+[Unit]
+Description=CakePHP Workflow Scheduler Daemon
+After=mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/your-app
+ExecStart=/usr/bin/php bin/cake work_flow_scheduler.scheduler --max-concurrent=5
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/workflow-scheduler.log
+StandardError=append:/var/log/workflow-scheduler-error.log
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=512
+
+[Install]
+WantedBy=multi-user.target

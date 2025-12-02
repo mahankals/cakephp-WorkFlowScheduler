@@ -9,6 +9,7 @@ use Cake\Core\ContainerInterface;
 use Cake\Core\PluginApplicationInterface;
 use Cake\Http\MiddlewareQueue;
 use Cake\Routing\RouteBuilder;
+use WorkFlowScheduler\Command\ExecuteWorkflowCommand;
 
 /**
  * Plugin for WorkFlowScheduler
@@ -98,10 +99,10 @@ class WorkFlowSchedulerPlugin extends BasePlugin
      */
     public function console(CommandCollection $commands): CommandCollection
     {
-        // Add your commands here
-        // remove this method hook if you don't need it
-
         $commands = parent::console($commands);
+
+        // Register commands
+        $commands->add('work_flow_scheduler.execute_workflow', ExecuteWorkflowCommand::class);
 
         return $commands;
     }

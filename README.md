@@ -5,6 +5,8 @@ A CakePHP plugin to manage and execute automated workflows, similar to make.com 
 ## Features
 - **Workflow Management**: Define workflows with specific schedules.
 - **Auto-Discovery**: Workflows are automatically discovered from `App\Workflow` namespace - no manual registration needed!
+- **Parallel Execution**: Run multiple workflows simultaneously with configurable concurrency limits (default: 5 concurrent executions).
+- **Cross-Platform**: Works on both Windows (development) and Linux (production) with optimized process management.
 - **Execution Tracking**: Track every execution of a workflow, including status (pending, running, completed, failed).
 - **Step Logging**: Log individual steps within a workflow execution with detailed input/output data and duration.
 - **Visual Interface**: View workflow status and execution history via a web UI with filtering and pagination.
@@ -12,6 +14,7 @@ A CakePHP plugin to manage and execute automated workflows, similar to make.com 
 - **Manual Execution**: Trigger workflows manually from the UI with one-click execution.
 - **JSON Data Display**: View input/output data in formatted JSON with accordion UI.
 - **Status Indicators**: Color-coded status badges for completed, failed, running, and pending executions.
+- **Production Ready**: Includes systemd and Supervisor configuration files for Linux deployment.
 
 ## Installation
 
@@ -74,7 +77,7 @@ The workflow will be **automatically discovered** - no manual registration neede
 your-app/
 ├── src/
 │   └── Workflow/                          ← Your workflows go here
-│       ├── InvoiceEnforcementWorkflow.php
+│       ├── NotifyStuckedProcessWorkflow.php
 │       └── MyNewWorkflowWorkflow.php
 │
 └── plugins/
@@ -123,7 +126,7 @@ This generates a complete workflow template in `src/Workflow/MyNewWorkflowWorkfl
 
 ### Method 2: Manual Creation
 
-Create a new class in `src/Workflow/` that implements `WorkFlowScheduler\Workflow\WorkflowInterface`:
+Create a new class in `src/Workflow/` that extends `WorkFlowScheduler\Workflow\BaseWorkflow`:
 
 ```php
 <?php
@@ -131,81 +134,54 @@ declare(strict_types=1);
 
 namespace App\Workflow;
 
-use Cake\ORM\TableRegistry;
-use WorkFlowScheduler\Workflow\WorkflowInterface;
+use WorkFlowScheduler\Workflow\BaseWorkflow;
 
-class MyNewWorkflowWorkflow implements WorkflowInterface
+class MyNewWorkflowWorkflow extends BaseWorkflow
 {
-    protected $executionId;
-
-    public function execute(string $executionId): void
+    /**
+     * Implement the process method with your workflow logic
+     */
+    protected function process(string $executionId): void
     {
-        $this->executionId = $executionId;
-        $startTime = microtime(true);
-        
-        try {
-            // Step 1
-            $result1 = $this->runStep('Step 1: Initialization', function() {
-                // Your logic here
-                return ['status' => 'initialized'];
-            });
+        // Step 1
+        $result1 = $this->runStep('Step 1: Initialization', function() {
+            // Your logic here
+            return ['status' => 'initialized'];
+        });
 
-            // Step 2
-            $result2 = $this->runStep('Step 2: Processing', function() use ($result1) {
-                // Your logic here
-                return ['status' => 'processed'];
-            }, json_encode($result1));
-
-            $duration = (int)((microtime(true) - $startTime) * 1000);
-            $this->updateExecutionStatus('completed', null, $duration);
-        } catch (\Exception $e) {
-            $duration = (int)((microtime(true) - $startTime) * 1000);
-            $this->updateExecutionStatus('failed', $e->getMessage(), $duration);
-        }
-    }
-
-    protected function runStep(string $stepName, callable $callback, ?string $inputData = null)
-    {
-        $stepsTable = TableRegistry::getTableLocator()->get('WorkFlowScheduler.ExecutionSteps');
-        $step = $stepsTable->newEmptyEntity();
-        $step->execution_id = $this->executionId;
-        $step->step_name = $stepName;
-        $step->status = 'running';
-        $step->input_data = $inputData;
-        $step->started = date('Y-m-d H:i:s');
-        $stepsTable->save($step);
-
-        $startTime = microtime(true);
-        try {
-            $result = $callback();
-            $step->status = 'completed';
-            $step->output_data = is_array($result) ? json_encode($result) : $result;
-        } catch (\Exception $e) {
-            $step->status = 'failed';
-            $step->output_data = $e->getMessage();
-            throw $e;
-        } finally {
-            $step->completed = date('Y-m-d H:i:s');
-            $step->duration = (int)((microtime(true) - $startTime) * 1000);
-            $stepsTable->save($step);
-        }
-
-        return $result;
-    }
-
-    protected function updateExecutionStatus(string $status, ?string $log = null, ?int $duration = null): void
-    {
-        $executionsTable = TableRegistry::getTableLocator()->get('WorkFlowScheduler.WorkflowExecutions');
-        $execution = $executionsTable->get($this->executionId);
-        $execution->status = $status;
-        $execution->completed = date('Y-m-d H:i:s');
-        $execution->duration = $duration;
-        if ($log) {
-            $execution->log = $log;
-        }
-        $executionsTable->save($execution);
+        // Step 2
+        $result2 = $this->runStep('Step 2: Processing', function() use ($result1) {
+            // Your logic here
+            return ['status' => 'processed'];
+        }, json_encode($result1));
     }
 }
+```
+
+### Workflow Structure Diagram
+
+```mermaid
+classDiagram
+    class WorkflowInterface {
+        <<interface>>
+        +execute(string executionId)
+    }
+    
+    class BaseWorkflow {
+        <<abstract>>
+        #executionId: string
+        +execute(string executionId)
+        #process(string executionId)*
+        #runStep(string stepName, callable callback, string inputData)
+        #updateExecutionStatus(string status, string log, int duration)
+    }
+    
+    class MyWorkflow {
+        #process(string executionId)
+    }
+    
+    WorkflowInterface <|.. BaseWorkflow
+    BaseWorkflow <|-- MyWorkflow
 ```
 
 ## Auto-Discovery
@@ -218,7 +194,7 @@ Workflows are automatically discovered from the `App\Workflow` namespace using t
 
 The scheduler automatically:
 1. Takes the workflow name from the database (e.g., `InvoiceEnforcement`)
-2. Appends `Workflow` to create the class name (e.g., `InvoiceEnforcementWorkflow`)
+2. Appends `Workflow` to create the class name (e.g., `NotifyStuckedProcessWorkflow`)
 3. Looks for the class in `App\Workflow` namespace
 4. If not found, tries without the `Workflow` suffix as a fallback
 
@@ -338,12 +314,184 @@ All endpoints return JSON:
 
 ## Example Workflow
 
-See `src/Workflow/InvoiceEnforcementWorkflow.php` for a complete example that demonstrates:
+See `src/Workflow/NotifyStuckedProcessWorkflow.php` for a complete example that demonstrates:
 - Multi-step workflow execution
 - External API calls (weather data)
 - Data logging
 - Error handling
 - Step timing with `sleep()` for demonstration
+
+## Parallel Execution & Deployment
+
+The scheduler supports **parallel execution** of workflows, allowing multiple workflows to run simultaneously.
+
+### How It Works
+
+```mermaid
+graph TD
+    Scheduler[Scheduler Daemon] -->|Monitors| DB[(Database)]
+    Scheduler -->|Spawns| Worker1[Worker Process 1]
+    Scheduler -->|Spawns| Worker2[Worker Process 2]
+    Scheduler -->|Spawns| Worker3[Worker Process 3]
+    
+    Worker1 -->|Updates| DB
+    Worker2 -->|Updates| DB
+    Worker3 -->|Updates| DB
+    
+    subgraph "Parallel Execution"
+    Worker1
+    Worker2
+    Worker3
+    end
+```
+
+### Running the Scheduler
+
+#### Daemon Mode (Continuous)
+```bash
+# Default: 5 concurrent workflows
+bin/cake work_flow_scheduler.scheduler
+
+# Custom concurrency limit
+bin/cake work_flow_scheduler.scheduler --max-concurrent=10
+```
+
+#### One-Time Run (For Cron)
+```bash
+# Process all pending, then exit
+bin/cake work_flow_scheduler.scheduler --once
+
+# With custom concurrency
+bin/cake work_flow_scheduler.scheduler --once --max-concurrent=3
+```
+
+#### Specific Workflow
+```bash
+bin/cake work_flow_scheduler.scheduler MyNewWorkflow
+```
+
+### Performance Comparison
+
+| Scenario | Sequential | Parallel (5 workers) |
+|----------|-----------|---------------------|
+| 5 workflows × 2 min each | **10 minutes** | **2 minutes** |
+| 10 workflows × 1 min each | **10 minutes** | **2 minutes** |
+| 1 long (10 min) + 5 short (30s) | **12.5 minutes** | **10.5 minutes** |
+
+### Production Deployment
+
+#### Option 1: Systemd Service (Recommended for Linux)
+
+1. **Copy service file:**
+```bash
+sudo cp plugins/WorkFlowScheduler/config/workflow-scheduler.service /etc/systemd/system/
+```
+
+2. **Edit the service file:**
+```bash
+sudo nano /etc/systemd/system/workflow-scheduler.service
+```
+
+Update these lines:
+```ini
+User=www-data                                    # Your web server user
+WorkingDirectory=/var/www/your-app              # Your app path
+ExecStart=/usr/bin/php bin/cake work_flow_scheduler.scheduler --max-concurrent=5
+```
+
+3. **Enable and start:**
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable workflow-scheduler
+sudo systemctl start workflow-scheduler
+```
+
+4. **Check status:**
+```bash
+sudo systemctl status workflow-scheduler
+sudo journalctl -u workflow-scheduler -f  # View logs
+```
+
+#### Option 2: Supervisor
+
+1. **Copy configuration:**
+```bash
+sudo cp plugins/WorkFlowScheduler/config/workflow-scheduler.conf /etc/supervisor/conf.d/
+```
+
+2. **Edit configuration:**
+```bash
+sudo nano /etc/supervisor/conf.d/workflow-scheduler.conf
+```
+
+Update the paths and user.
+
+3. **Start:**
+```bash
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start workflow-scheduler
+```
+
+4. **Check status:**
+```bash
+sudo supervisorctl status workflow-scheduler
+sudo supervisorctl tail -f workflow-scheduler  # View logs
+```
+
+#### Option 3: Cron (Simple, No Daemon)
+
+```bash
+# Run every minute
+* * * * * cd /var/www/app && bin/cake work_flow_scheduler.scheduler --once --max-concurrent=5
+```
+
+**Note:** With cron, each run is independent. The `--max-concurrent` limit applies per cron execution.
+
+### Monitoring
+
+#### Check Running Workflows (Linux)
+```bash
+# View all scheduler processes
+ps aux | grep work_flow_scheduler
+
+# Count running workflows
+ps aux | grep execute_workflow | wc -l
+
+# View process tree
+pstree -p | grep cake
+```
+
+#### Resource Monitoring
+```bash
+# Monitor CPU and memory
+top -u www-data
+
+# Detailed process info
+htop -u www-data
+```
+
+### Configuration
+
+#### Adjust Max Concurrent Executions
+
+The default is 5 concurrent workflows. Adjust based on your server resources:
+
+```bash
+# Light server (1-2 GB RAM)
+--max-concurrent=2
+
+# Medium server (4-8 GB RAM)
+--max-concurrent=5
+
+# Heavy server (16+ GB RAM)
+--max-concurrent=10
+```
+
+**Rule of thumb:** 
+- Each workflow may use 50-200 MB RAM
+- Monitor your server and adjust accordingly
+- Start conservative and increase if needed
 
 ## Troubleshooting
 

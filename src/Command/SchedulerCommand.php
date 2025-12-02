@@ -11,11 +11,24 @@ use Cake\ORM\TableRegistry;
 
 class SchedulerCommand extends Command
 {
+    /**
+     * Maximum number of concurrent workflow executions
+     * @var int
+     */
+    protected $maxConcurrent = 5;
+
+    /**
+     * Array to track running processes
+     * @var array
+     */
+    protected $runningProcesses = [];
+
     public function buildOptionParser(ConsoleOptionParser $parser): ConsoleOptionParser
     {
         $parser = parent::buildOptionParser($parser);
 
         $parser->addArgument('workflow', [
+            'short' => 'w',
             'help' => 'The name of the workflow to execute (optional)',
             'required' => false,
         ]);
@@ -26,6 +39,12 @@ class SchedulerCommand extends Command
             'boolean' => true,
         ]);
 
+        $parser->addOption('max-concurrent', [
+            'short' => 'm',
+            'help' => 'Maximum number of concurrent executions (default: 5)',
+            'default' => 5,
+        ]);
+
         return $parser;
     }
 
@@ -33,6 +52,8 @@ class SchedulerCommand extends Command
     {
         $workflowName = $args->getArgument('workflow');
         $once = $args->getOption('once');
+        $this->maxConcurrent = (int) $args->getOption('max-concurrent');
+
         $executionsTable = TableRegistry::getTableLocator()->get('WorkFlowScheduler.WorkflowExecutions');
         $workflowsTable = TableRegistry::getTableLocator()->get('WorkFlowScheduler.Workflows');
 
@@ -68,17 +89,22 @@ class SchedulerCommand extends Command
                 }
             }
 
-            $this->processExecution($execution, $io);
+            $this->spawnWorkflowExecution($execution->id, $io);
             return static::CODE_SUCCESS;
         }
 
-        // Daemon / Scheduler Mode
+        // Daemon / Scheduler Mode with Parallel Execution
         $io->out("Starting Scheduler Daemon...");
+        $io->out("Max concurrent executions: {$this->maxConcurrent}");
         if ($once) {
             $io->out("Running in --once mode.");
         }
 
         while (true) {
+            // Clean up finished processes
+            $this->cleanupFinishedProcesses($io);
+
+            // Get pending executions
             $pendingExecutions = $executionsTable->find()
                 ->contain(['Workflows'])
                 ->where(['WorkflowExecutions.status' => 'pending'])
@@ -88,6 +114,8 @@ class SchedulerCommand extends Command
             if ($pendingExecutions->isEmpty()) {
                 if ($once) {
                     $io->out("No pending executions.");
+                    // Wait for running processes to finish
+                    $this->waitForRunningProcesses($io);
                     break;
                 }
                 // Sleep to avoid CPU spike
@@ -95,77 +123,134 @@ class SchedulerCommand extends Command
                 continue;
             }
 
+            // Spawn new executions up to max concurrent limit
             foreach ($pendingExecutions as $execution) {
-                $io->out("Processing execution ID: {$execution->id} (Workflow: {$execution->workflow->name})");
-                $this->processExecution($execution, $io);
+                if (count($this->runningProcesses) >= $this->maxConcurrent) {
+                    $io->out("Max concurrent limit reached ({$this->maxConcurrent}). Waiting...");
+                    break;
+                }
+
+                $io->out("Spawning execution ID: {$execution->id} (Workflow: {$execution->workflow->name})");
+                $this->spawnWorkflowExecution($execution->id, $io);
             }
 
             if ($once) {
+                // Wait for all running processes to finish
+                $this->waitForRunningProcesses($io);
                 break;
             }
+
+            // Small sleep to prevent tight loop
+            sleep(2);
         }
 
         return static::CODE_SUCCESS;
     }
 
-    protected function processExecution($execution, ConsoleIo $io): void
+    /**
+     * Spawn a workflow execution as a background process
+     */
+    protected function spawnWorkflowExecution(string $executionId, ConsoleIo $io): void
     {
-        $executionsTable = TableRegistry::getTableLocator()->get('WorkFlowScheduler.WorkflowExecutions');
-        $workflowsTable = TableRegistry::getTableLocator()->get('WorkFlowScheduler.Workflows');
+        $cmd = 'bin' . DS . 'cake work_flow_scheduler.execute_workflow ' . escapeshellarg($executionId);
 
-        // Update status to running
-        $execution->status = 'running';
-        $execution->started = date('Y-m-d H:i:s');
-        $executionsTable->save($execution);
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            // Windows: Use start command to run in background
+            // We use WScript.Shell to run invisible and avoid pipe issues
+            $wscript = "Set WshShell = CreateObject(\"WScript.Shell\")\n";
+            $wscript .= "WshShell.Run \"cmd /c " . str_replace('"', '""', 'cd ' . ROOT . ' && ' . $cmd) . "\", 0, false";
 
-        try {
-            $className = $this->getWorkflowClass($execution->workflow->name);
+            $vbsFile = sys_get_temp_dir() . DS . 'spawn_' . $executionId . '.vbs';
+            file_put_contents($vbsFile, $wscript);
 
-            if ($className && class_exists($className)) {
-                $workflowInstance = new $className();
-                $workflowInstance->execute($execution->id);
+            pclose(popen('cscript //nologo "' . $vbsFile . '"', 'r'));
 
-                $io->success("Workflow {$execution->workflow->name} completed.");
+            // Give it a moment to start before deleting script
+            // We can't delete immediately because cscript needs to read it
+            // But we can't wait too long either. 
+            // Better approach: Let the OS clean up temp files or use a scheduled task to clean up.
+            // For now, we'll leave it or try to delete it later if possible.
+            // Actually, we can just not delete it immediately.
 
-                // Mark as completed
-                $execution->status = 'completed';
-                $execution->completed = date('Y-m-d H:i:s');
-                $executionsTable->save($execution);
-            } else {
-                throw new \Exception("Workflow class not found for {$execution->workflow->name}");
+            $this->runningProcesses[$executionId] = [
+                'execution_id' => $executionId,
+                'started' => time(),
+                'vbs_file' => $vbsFile
+            ];
+        } else {
+            // Linux/Unix: Use background execution with process tracking
+            $cmd = 'cd ' . ROOT . ' && ' . $cmd . ' > /dev/null 2>&1 & echo $!';
+            $pid = trim(shell_exec($cmd));
+
+            if ($pid) {
+                $this->runningProcesses[$executionId] = [
+                    'execution_id' => $executionId,
+                    'pid' => $pid,
+                    'started' => time()
+                ];
+                $io->verbose("Spawned process PID: {$pid} for execution: {$executionId}");
             }
-
-            // Update workflow last_executed
-            $workflow = $workflowsTable->get($execution->workflow_id);
-            $workflow->last_executed = date('Y-m-d H:i:s');
-            $workflowsTable->save($workflow);
-
-        } catch (\Throwable $e) {
-            $io->error("Workflow {$execution->workflow->name} failed: " . $e->getMessage());
-
-            $execution->status = 'failed';
-            $execution->completed = date('Y-m-d H:i:s');
-            $execution->log = $e->getMessage();
-            $executionsTable->save($execution);
         }
     }
 
-    protected function getWorkflowClass(string $name): ?string
+    /**
+     * Clean up finished processes from tracking array
+     */
+    protected function cleanupFinishedProcesses(ConsoleIo $io): void
     {
-        // Auto-discover workflow classes from App\Workflow namespace
-        $className = 'App\\Workflow\\' . $name . 'Workflow';
+        foreach ($this->runningProcesses as $executionId => $processInfo) {
+            $isRunning = false;
 
-        if (class_exists($className)) {
-            return $className;
+            if (isset($processInfo['pid'])) {
+                // Linux/Unix: Check if process is still running
+                $isRunning = $this->isProcessRunning($processInfo['pid']);
+            } else {
+                // Windows: Check execution status in database
+                $executionsTable = TableRegistry::getTableLocator()->get('WorkFlowScheduler.WorkflowExecutions');
+                /** @var \WorkFlowScheduler\Model\Entity\WorkflowExecution $execution */
+                $execution = $executionsTable->get($executionId);
+                $isRunning = in_array($execution->status, ['pending', 'running']);
+
+                // Cleanup VBS file if finished
+                if (!$isRunning && isset($processInfo['vbs_file']) && file_exists($processInfo['vbs_file'])) {
+                    @unlink($processInfo['vbs_file']);
+                }
+            }
+
+            if (!$isRunning) {
+                $io->verbose("Process finished for execution: {$executionId}");
+                unset($this->runningProcesses[$executionId]);
+            }
+        }
+    }
+
+    /**
+     * Check if a process is still running (Linux/Unix)
+     */
+    protected function isProcessRunning(string $pid): bool
+    {
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            return false; // Not applicable on Windows
         }
 
-        // Fallback: Try without 'Workflow' suffix
-        $className = 'App\\Workflow\\' . $name;
+        $result = shell_exec("ps -p {$pid} -o pid=");
+        return !empty(trim($result));
+    }
 
-        if (class_exists($className)) {
-            return $className;
+    /**
+     * Wait for all running processes to finish
+     */
+    protected function waitForRunningProcesses(ConsoleIo $io): void
+    {
+        $io->out("Waiting for " . count($this->runningProcesses) . " running processes to finish...");
+
+        while (!empty($this->runningProcesses)) {
+            $this->cleanupFinishedProcesses($io);
+            if (!empty($this->runningProcesses)) {
+                sleep(2);
+            }
         }
 
-        return null;
+        $io->out("All processes finished.");
     }
 }

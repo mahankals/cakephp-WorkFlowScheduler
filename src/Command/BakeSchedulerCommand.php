@@ -73,81 +73,23 @@ declare(strict_types=1);
 
 namespace App\\Workflow;
 
-use Cake\\ORM\\TableRegistry;
-use WorkFlowScheduler\\Workflow\\WorkflowInterface;
+use WorkFlowScheduler\\Workflow\\BaseWorkflow;
 
-class {$name}Workflow implements WorkflowInterface
+class {$name}Workflow extends BaseWorkflow
 {
-    protected \$executionId;
-
-    public function execute(string \$executionId): void
+    protected function process(string \$executionId): void
     {
-        \$this->executionId = \$executionId;
-        \$startTime = microtime(true);
-        
-        try {
-            // Step 1: Your first step
-            \$result1 = \$this->runStep('Step 1: Initialization', function() {
-                // Add your logic here
-                return ['status' => 'initialized'];
-            });
+        // Step 1: Your first step
+        \$result1 = \$this->runStep('Step 1: Initialization', function() {
+            // Add your logic here
+            return ['status' => 'initialized'];
+        });
 
-            // Step 2: Your second step
-            \$result2 = \$this->runStep('Step 2: Processing', function() use (\$result1) {
-                // Add your logic here
-                return ['status' => 'processed'];
-            }, json_encode(\$result1));
-
-            // Update Execution Status
-            \$duration = (int)((microtime(true) - \$startTime) * 1000);
-            \$this->updateExecutionStatus('completed', null, \$duration);
-
-        } catch (\\Exception \$e) {
-            \$duration = (int)((microtime(true) - \$startTime) * 1000);
-            \$this->updateExecutionStatus('failed', \$e->getMessage(), \$duration);
-        }
-    }
-
-    protected function runStep(string \$stepName, callable \$callback, ?string \$inputData = null)
-    {
-        \$stepsTable = TableRegistry::getTableLocator()->get('WorkFlowScheduler.ExecutionSteps');
-        \$step = \$stepsTable->newEmptyEntity();
-        \$step->execution_id = \$this->executionId;
-        \$step->step_name = \$stepName;
-        \$step->status = 'running';
-        \$step->input_data = \$inputData;
-        \$step->started = date('Y-m-d H:i:s');
-        \$stepsTable->save(\$step);
-
-        \$startTime = microtime(true);
-        try {
-            \$result = \$callback();
-            \$step->status = 'completed';
-            \$step->output_data = is_array(\$result) ? json_encode(\$result) : \$result;
-        } catch (\\Exception \$e) {
-            \$step->status = 'failed';
-            \$step->output_data = \$e->getMessage();
-            throw \$e;
-        } finally {
-            \$step->completed = date('Y-m-d H:i:s');
-            \$step->duration = (int)((microtime(true) - \$startTime) * 1000);
-            \$stepsTable->save(\$step);
-        }
-
-        return \$result;
-    }
-
-    protected function updateExecutionStatus(string \$status, ?string \$log = null, ?int \$duration = null): void
-    {
-        \$executionsTable = TableRegistry::getTableLocator()->get('WorkFlowScheduler.WorkflowExecutions');
-        \$execution = \$executionsTable->get(\$this->executionId);
-        \$execution->status = \$status;
-        \$execution->completed = date('Y-m-d H:i:s');
-        \$execution->duration = \$duration;
-        if (\$log) {
-            \$execution->log = \$log;
-        }
-        \$executionsTable->save(\$execution);
+        // Step 2: Your second step
+        \$result2 = \$this->runStep('Step 2: Processing', function() use (\$result1) {
+            // Add your logic here
+            return ['status' => 'processed'];
+        }, json_encode(\$result1));
     }
 }
 
